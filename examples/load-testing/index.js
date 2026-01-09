@@ -6,7 +6,6 @@ const {
     DiagLogLevel,
     diag,
 } = require("@opentelemetry/api");
-const { logs, SeverityNumber } = require("@opentelemetry/api-logs");
 const { resourceFromAttributes } = require("@opentelemetry/resources");
 const {
     ATTR_SERVICE_NAME,
@@ -28,13 +27,6 @@ const {
 const {
     OTLPMetricExporter,
 } = require("@opentelemetry/exporter-metrics-otlp-http");
-
-// Logs
-const {
-    LoggerProvider,
-    BatchLogRecordProcessor,
-} = require("@opentelemetry/sdk-logs");
-const { OTLPLogExporter } = require("@opentelemetry/exporter-logs-otlp-http");
 
 // Enable diagnostic logging for debugging
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
@@ -87,25 +79,8 @@ const meterProvider = new MeterProvider({
 });
 metrics.setGlobalMeterProvider(meterProvider);
 
-// Configure Logger Provider
-const logExporter = new OTLPLogExporter({
-    url: `${otlpEndpoint}/v1/logs`,
-    headers,
-});
-
-const loggerProvider = new LoggerProvider({
-    resource,
-    processors: [
-        new BatchLogRecordProcessor(logExporter, {
-            maxExportBatchSize: 500,
-        }),
-    ],
-});
-logs.setGlobalLoggerProvider(loggerProvider);
-
 const tracer = trace.getTracer("load-testing", "1.0.0");
 const meter = metrics.getMeter("load-testing", "1.0.0");
-const logger = logs.getLogger("load-testing", "1.0.0");
 
 // Metrics
 const requestCounter = meter.createCounter("load_test.requests", {
@@ -174,25 +149,6 @@ function randomDuration() {
     return Math.floor(Math.random() * 500) + 50;
 }
 
-function emitLog(message, severityNumber, attributes = {}) {
-    logger.emit({
-        severityNumber,
-        severityText: getSeverityText(severityNumber),
-        body: message,
-        attributes: {
-            "log.source": "load-testing",
-            ...attributes,
-        },
-    });
-}
-
-function getSeverityText(severityNumber) {
-    if (severityNumber <= SeverityNumber.DEBUG) return "DEBUG";
-    if (severityNumber <= SeverityNumber.INFO) return "INFO";
-    if (severityNumber <= SeverityNumber.WARN) return "WARN";
-    return "ERROR";
-}
-
 function generateSpan() {
     const endpoint = randomElement(endpoints);
     const method = randomElement(httpMethods);
@@ -219,13 +175,6 @@ function generateSpan() {
         method,
         endpoint,
         status_code: statusCode.toString(),
-    });
-
-    // Emit start log
-    emitLog(`Starting ${method} ${endpoint}`, SeverityNumber.INFO, {
-        "http.method": method,
-        "http.url": endpoint,
-        "span.id": spanCount,
     });
 
     context.with(trace.setSpan(context.active(), span), () => {
@@ -267,27 +216,8 @@ function generateSpan() {
                     status_code: statusCode.toString(),
                     endpoint,
                 });
-                emitLog(
-                    `Error: ${method} ${endpoint} returned ${statusCode}`,
-                    SeverityNumber.ERROR,
-                    {
-                        "http.method": method,
-                        "http.url": endpoint,
-                        "http.status_code": statusCode,
-                        error: true,
-                    },
-                );
             } else {
                 span.setStatus({ code: 1 });
-                emitLog(
-                    `Completed ${method} ${endpoint} in ${duration}ms`,
-                    SeverityNumber.INFO,
-                    {
-                        "http.method": method,
-                        "http.url": endpoint,
-                        duration_ms: duration,
-                    },
-                );
             }
 
             requestDuration.record(duration, {
@@ -321,10 +251,6 @@ function startLoadTest() {
     isRunning = true;
     spanCount = 0;
     activeSpans = 0;
-
-    emitLog("Load test started", SeverityNumber.INFO, {
-        "test.action": "start",
-    });
 
     console.log("Starting continuous load test...");
     updateUI();
@@ -382,11 +308,6 @@ function stopLoadTest() {
         intervalId = null;
     }
 
-    emitLog("Load test stopped", SeverityNumber.INFO, {
-        "test.action": "stop",
-        "total.spans": spanCount,
-    });
-
     console.log(`Load test stopped. Total spans generated: ${spanCount}`);
     updateUI();
 }
@@ -438,5 +359,5 @@ window.addEventListener("load", () => {
     setInterval(updateCounter, 500);
 
     console.log("Load testing example ready");
-    console.log('Click "Start" to begin generating spans, metrics, and logs');
+    console.log('Click "Start" to begin generating spans and metrics');
 });
