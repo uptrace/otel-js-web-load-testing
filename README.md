@@ -18,4 +18,6 @@ To start example:
 UPTRACE_DSN="http://secret@localhost:14318/?grpc=14317" make
 ```
 
-Then open [http://localhost:8090/](http://localhost:8090/)
+Then open [http://localhost:8090/](http://localhost:8090/) and press the `Start` button. Observe lots of `pending` stalled requests:
+
+![pending](pending.png)
